@@ -73,7 +73,7 @@ void copyIndexFile() {
   File outputFile;
 
   outputFile = new File('${deployFolderName}/index.html');
-  new File('index-by-hand.html').readAsString().then((indexFile) {
+  new File('tool/index-by-hand.html').readAsString().then((indexFile) {
     outputFile.writeAsString(indexFile);
   });
 }
