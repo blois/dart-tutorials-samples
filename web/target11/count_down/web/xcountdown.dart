@@ -1,18 +1,21 @@
+// Some things we need.
 import 'package:web_ui/web_ui.dart';
 import 'dart:html';
 import 'dart:async';
 import 'dart:indexed_db';
 
-// Observe timeRemaining. Used to update each milestone display each second.
+// Observe timeRemaining.
+// Used to format and update each milestone display each second.
 @observable String timeRemaining = '';
 
-// Observe msg. It displays a message for the user.
-@observable String msg = '';
+// Observe errorMsg.
+// It displays a message for the user.
+@observable String errorMsg = '';
 
 // A class to hold the milestone info.
 @observable class Milestone {
-  String name;
-  String dateAndTime;
+  final String name;
+  final String dateAndTime;
   String display;
   
   Milestone(this.name, this.dateAndTime, this.display);
@@ -21,219 +24,225 @@ import 'dart:indexed_db';
 
 class CounterComponent extends WebComponent {
 
-  // Bind-values for input elements.
+  // These are bound to input elements.
   String newMilestoneName = "New Year's";
   String newMilestoneDate = '2014-01-01';
   String newMilestoneTime = '00:00:00';
   
-  // List of milestones to which to count down
-  // XX: should probably have a specialized list to override contains();
+  // List of milestones to which to count down.
   @observable List<Milestone> milestones = toObservable(new List());
   
   // Fires an event every second to update displays.
   // Is null when no milestones to count.
   Timer timer = null;
   
-  // The indexed database to store the countdown timers. Provided by the window.
+  // The indexed database to store the milestones.
+  // Provided by the window.
   Database indexedDB;
-  String storeName = 'newcountdown'; // the name 
-  int dbVersion;
-  
+  String storeName = 'countDownStore'; 
   bool idbAvailable = IdbFactory.supported;
+  
+  // For development.
+  bool verbose = true;
 
   /*
-   * Initializes the database connection.
-   * Opens the database called 'myAwesomeDatabase'.
-   * Creates an object store called 'newcountdown'.
-   * Using version 7 because I can.
-   */
-  // Overrides WebComponent inserted() method,
-  // XX: is there a super.inserted() that I should be calling?
-  inserted() {
-    if (!idbAvailable) return;
-
-    // Open the Database.
-    window.indexedDB.open('myAwesomeDatabase', version: 7,
-        onUpgradeNeeded: (e) {
-          indexedDB = e.target.result;
-          if (!indexedDB.objectStoreNames.contains(storeName)) {
-            indexedDB.createObjectStore(storeName);
-          }
-        })
-        .then((db) {
-          indexedDB = db;
-          initializeFromDB();
-          return true; // XX: why am I returning true here?
-        });
-  }
-
-  // Called from inserted(), gets all items from the database
-  // and adds a milestone to the internal list for each one.
-  void initializeFromDB() {
-    var trans = indexedDB.transaction(storeName, 'readonly');
-    var store = trans.objectStore(storeName);
-    // Get everything in the store.
-    store.openCursor(autoAdvance: true)
-      .listen((cursor) {
-        milestones.add(new Milestone(cursor.key, cursor.value, cursor.key));
-        startMilestoneTimer();
-      });
-  }
-
-  /*
+   * 
    * Click handlers for various UI buttons.
+   * 
+   * 
    */
   
+  // Plus + button click handler.
+  // Does some boundary checking, then calls _addMilestone() to
+  // really add a milestone to the internal list and to the database.
+  void addMilestone() {
+    if (verbose) print('in addMilestone');
+        
+    errorMsg = '';
+    
+    // Make sure milestone name is unique.
+    if (milestones.any((e) => e.name == newMilestoneName)) {
+      errorMsg = '$newMilestoneName is already in database';
+      return;
+    }
+    
+    // Make sure milestone is in the future, and not in the past.
+    String str = newMilestoneDate + ' ' + newMilestoneTime;  
+    DateTime now = new DateTime.now();
+    DateTime milestoneTime = DateTime.parse(str);
+    
+    if (milestoneTime.isAfter(now)) {
+      _addMilestone(newMilestoneName, str);
+    } else {
+      errorMsg = 'Milestone must be later than now.';
+    }
+  }
+  
+  // Called from addMilestone.
+  void _addMilestone(String name, String dateAndTime) {
+    if (verbose) print('in _addMilestone: $name $dateAndTime');
+    
+    // Add to database.
+    Transaction t = indexedDB.transaction(storeName, 'readwrite');
+    t.objectStore(storeName).put(dateAndTime, name) /* It's value first, then key. Who's idea was that? */
+    .then((IDBRequest) {
+      // Add to internal list.
+      milestones.add(new Milestone(name, dateAndTime, name));
+      startMilestoneTimer();
+    });
+  }
+  
+  // Minus - button click handler.
+  // Removes the associated item from the internal list and from the database.
+  void removeMilestone(int index) {
+    if (verbose) print('in removeMilestone: $index');
+
+    errorMsg = '';
+    
+    // Remove from database.
+    Transaction t = indexedDB.transaction(storeName, 'readwrite');
+    t.objectStore(storeName).delete(milestones[index].name)
+    .then((IDBRequest) {
+      // Remove from internal list.
+      milestones.removeAt(index);
+      stopMilestoneTimer();
+    });
+  }
+  
+  // Clear button click handler.
+  // Removes all milestones from the internal list and from the database.
+  void clearDatabase() {
+    if (verbose) print('in clearDatabase');
+    
+    errorMsg = '';
+    
+    // Clear database.
+    Transaction t = indexedDB.transaction(storeName, 'readwrite');
+    t.objectStore(storeName).clear()
+    .then((request) {
+      // Clear internal list.
+      print('database cleared');
+      milestones.clear();
+    });
+  }
+ 
   // Show button click handler.
   // Prints the number of milestones currently in the database.
   void showMeTheMoney() {
-    if (!idbAvailable) return;
+    if (verbose) print('in showMeTheMoney');
     
+    errorMsg = '';
+    // Count records in database.
     Transaction t = indexedDB.transaction(storeName, 'readonly');
     t.objectStore(storeName).count()
     .then((count) {
       print(count);
     });
+    // Print milestones from list.
     milestones.forEach((e) { print(e.toString()); });
-    msg = '';
   }
   
-  // Clear button click handler.
-  // Removes all milestones from the internal list and from the database
-  void clearDatabase() {
-    if (!idbAvailable) { milestones.clear(); msg =''; return; }
+  /*
+   * Initialization bizness
+   * 
+   * Overrides WebComponent inserted() method,
+   * Initializes the database connection.
+   * Opens the database called 'countDownDatabase'.
+   * Creates an object store called 'countDownStore', if upgrade needed.
+   * Using version 1 because I can.
+   */
+  void inserted() {
+    if (verbose) print('in inserted');
     
-    Transaction t = indexedDB.transaction(storeName, 'readwrite');
-    t.objectStore(storeName).clear()
-    .then((request) {
-      print('database cleared');
-      milestones.clear();
-      msg = '';
-    });
+    window.indexedDB.open('countDownDatabase',
+                           version: 1,
+                           onUpgradeNeeded: canCreateObjectStore)
+      .then((db) {
+        indexedDB = db;
+        _initializeFromDB();
+      });
   }
   
-  // + button click handler.
-  // Does some boundary checking, then calls _addMilestone() to
-  // Really add a milestone to the internal list and to the database.
-  void addMilestone() {
-    print('in addMilestone');
-        
-    // Concatenate date and time entered by user.
-    String str = newMilestoneDate + ' ' + newMilestoneTime;
-    
-    // Make sure milestone name is unique
-    for (int i = 0; i < milestones.length; i++) {
-      if (milestones[i].name == newMilestoneName) {
-        msg = '$newMilestoneName is already in database';
-        return;
-      }
-    }
-    
-    // Make sure milestone is in the future, and not in the past.
-    var now = new DateTime.now();
-    var milestoneTime = DateTime.parse(str);
-    if (milestoneTime.isAfter(now)) { // If milestone is in the future, add milestone.
-      _addMilestone(newMilestoneName, str);
-      print('adding $newMilestoneName $str');
-      msg = '';
-    } else {
-      msg = 'Milestone must be later than now.';
+  // Called when opening the database if a new database or a new version is needed.
+  canCreateObjectStore(e) {
+    indexedDB = e.target.result;
+    if (!indexedDB.objectStoreNames.contains(storeName)) {
+      indexedDB.createObjectStore(storeName);
     }
   }
-  
-  // Called from initializeFromDB and from + button click handler.
-  void _addMilestone(String name, String dateAndTime) {
-    print('in _addMilestone');
-    print(dateAndTime);
-    
-    if (!idbAvailable) {
-      milestones.add(new Milestone(name, dateAndTime, name));
-      startMilestoneTimer();
-      return;
-    }
-    
-    Transaction t = indexedDB.transaction(storeName, 'readwrite');
-    t.objectStore(storeName).put(dateAndTime, name) /* it's value first, then key. who's idea was that? */
-    .then((IDBRequest) {
-      // Add a new milestone
-      milestones.add(new Milestone(name, dateAndTime, name));
-      startMilestoneTimer();
-    });
-  }
-  
-  // - button click handler.
-  // Removes the associated item from the internal list and from the database.
-  void removeMilestone(int index) {
-    print('in removeMilestone');
-    print(index);
 
-    if (!idbAvailable) {
-      milestones.removeAt(index);
-      msg = '';
-      
-      // Turn off the timer if no more milestones to count down.
-      if (milestones.length == 0) {
-        timer.cancel();
-        timer = null;
-      }
-    }
+  // Called from inserted().
+  // Gets all items from the database
+  // and adds a milestone to the internal list for each one.
+  void _initializeFromDB() {
+    if (verbose) print('in _initializeFromDB');
     
-    Transaction t = indexedDB.transaction(storeName, 'readwrite');
-    t.objectStore(storeName).delete(milestones[index].name)
-    .then((IDBRequest) {
-      // Remove the data.
-      milestones.removeAt(index);
-      msg = '';
-      
-      // Turn off the timer if no more milestones to count down.
-      if (milestones.length == 0) {
-        timer.cancel();
-        timer = null;
-      }
-    });
+    var trans = indexedDB.transaction(storeName, 'readonly');
+    var store = trans.objectStore(storeName);
+    
+    // Get everything in the store.
+    store.openCursor(autoAdvance: true)
+      .listen((cursor) {
+        // Add milestone to the internal list.
+        milestones.add(new Milestone(cursor.key, cursor.value, cursor.key));
+      },
+      onDone: () {
+        // Start the timer when all milestones have been read.
+        startMilestoneTimer();
+        print('Read ${milestones.length} records.');
+      });
   }
 
   /*
    * Timer stuff.
    */
-  // Starts the time if it's not on (timer is null).
-  // Turned on when adding milestones.
-  // Turned off when removing milestones.
+  // Starts the timer if it's not on (timer is null).
   void startMilestoneTimer() {
     if (timer == null) {
-      // The timer goes off every second
+      // The timer goes off every second.
       var oneSecond = new Duration(seconds:1);
       timer = new Timer.periodic(oneSecond, updateDisplays);
+      print('timer on');
+    }
+  }
+  
+  // Turn off the timer if no more milestones to count down.
+  // That is, either there are no milestones, or they have all expired.
+  void stopMilestoneTimer() {
+    if (verbose) print('in stop milestone timer');
+    if (timer != null &&
+        (milestones.length == 0 ||
+         milestones.every((e) => e.display.startsWith('Huzzah')))) {
+      timer.cancel();
+      timer = null;
+      print('timer off');
     }
   }
   
   // Update the display for each milestone.
   void updateDisplays(Timer _) {
     // What time is it now?
-    var now = new DateTime.now();
+    DateTime now = new DateTime.now();
 
     // For each milestone, figure out how many seconds between now and then...
     for (int i = 0; i < milestones.length; i++) {
 
-      // If milestone hasn't already passed...
-      if (!milestones[i].display.startsWith('Huzzah')) {
-        // What time is the milestone?
-        var milestoneTime = DateTime.parse(milestones[i].dateAndTime);
-        
-        // What is the difference between now and milestone in seconds?
-        int secs = milestoneTime.difference(now).inSeconds;
-       
-        if (secs <= 0) {
-          // Milestone has JUST occurred.
-          timeRemaining = 'Huzzah for ${milestones[i].name}!';
-          milestones[i].display = timeRemaining;
-        } else {
-          // Still counting down...display it.
-          // These are observable strings, so web page gets automatically updated.
-          timeRemaining = formatDisplayString(secs);
-          milestones[i].display = timeRemaining + ' until ${milestones[i].name}';
-        } // end if-else
-      } // end if
+      // Skip this milestone, if it has already passed.
+      if (milestones[i].display.startsWith('Huzzah')) continue;
+      
+      // What is the difference between now and milestone in seconds?
+      DateTime milestoneTime = DateTime.parse(milestones[i].dateAndTime);
+      int secs = milestoneTime.difference(now).inSeconds;
+     
+      if (secs <= 0) {  // Milestone has JUST occurred.
+        timeRemaining = 'Huzzah for ${milestones[i].name}!';
+        milestones[i].display = timeRemaining;
+        stopMilestoneTimer();
+      } else {          // Still counting down...display it.
+        // These are observable strings, so web page gets automatically updated.
+        timeRemaining = formatDisplayString(secs);
+        milestones[i].display = timeRemaining + ' until ${milestones[i].name}';
+      } // end if-else
     } // end for loop
   } // end updateDisplays
   
