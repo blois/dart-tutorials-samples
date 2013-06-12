@@ -156,6 +156,8 @@ class CounterComponent extends WebComponent {
     
     if (!idbAvailable) {
       errorMsg = 'IndexedDB not supported.';
+      print(errorMsg);
+
       (query('#add_milestone_button') as ButtonElement).disabled = true;
       (query('#clear_button') as ButtonElement).disabled = true;
       (query('#show_button') as ButtonElement).disabled = true;
