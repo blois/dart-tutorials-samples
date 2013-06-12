@@ -1,0 +1,8 @@
+name: its_all_about_you
+description: It is, always, all about you.
+dependencies:
+  browser: any
+  web_ui: any
+#dependencies:
+#  js: any
+#  unittest: any

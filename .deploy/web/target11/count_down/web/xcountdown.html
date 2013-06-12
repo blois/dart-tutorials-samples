@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+
+<html>
+  <body>
+    <element name="x-count-down" constructor="CounterComponent" extends="div">
+        <template>
+          
+          <div>
+            <p>Enter a Milestone</p>
+            
+            <input type="text" name="newMilestoneName" bind-value="newMilestoneName">
+            <input type="date" name="newMilestoneDate" bind-value="newMilestoneDate">
+            <input type="time" name="newMilestoneTime" bind-value="newMilestoneTime">
+            <button id="add_milestone_button" on-click="addMilestone()">+</button>
+            
+            <ul id="milestones">
+              <template if='!milestones.isEmpty'>
+                <template repeat="myMilestone in milestones">
+                  <li>
+                    <span>{{myMilestone.display}}</span> <button on-click="removeMilestone($index)">-</button>
+                  </li>
+                </template>
+              </template>
+            </ul>
+          </div>
+          <div>
+            <button on-click="showMeTheMoney()" id="show_button">Show data</button>
+            <button on-click="clearDatabase()" id="clear_button">Clear</button>
+            <p style="color:red"> {{errorMsg}} </p>
+          </div>
+          
+        </template>
+        
+      <script type="application/dart" src="xcountdown.dart"></script>
+    </element>
+  </body>
+</html>
