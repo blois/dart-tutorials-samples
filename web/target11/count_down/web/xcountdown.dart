@@ -154,6 +154,13 @@ class CounterComponent extends WebComponent {
   void inserted() {
     if (verbose) print('in inserted');
     
+    if (!idbAvailable) {
+      errorMsg = 'IndexedDB not supported.';
+      (query('#add_milestone_button') as ButtonElement).disabled = true;
+      (query('#clear_button') as ButtonElement).disabled = true;
+      (query('#show_button') as ButtonElement).disabled = true;
+      return;
+    }
     window.indexedDB.open('countDownDatabase',
                            version: 1,
                            onUpgradeNeeded: canCreateObjectStore)
