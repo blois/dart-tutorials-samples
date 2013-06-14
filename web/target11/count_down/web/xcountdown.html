@@ -17,7 +17,7 @@
               <template if='!milestones.isEmpty'>
                 <template repeat="myMilestone in milestones">
                   <li>
-                    <span>{{myMilestone.display}}</span> <button on-click="removeMilestone($index)">-</button>
+                    <span>{{myMilestone.display}}</span> <button on-click="removeMilestone(myMilestone)">-</button>
                   </li>
                 </template>
               </template>

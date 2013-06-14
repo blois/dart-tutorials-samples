@@ -72,12 +72,12 @@ class CounterComponent extends WebComponent {
   
   // Minus - button click handler.
   // Removes the associated item from the internal list and from the database.
-  void removeMilestone(int index) {
-    log('in removeMilestone: $index');
+  void removeMilestone(Milestone milestone) {
+    log('in removeMilestone: $milestone');
     
     errorMsg = '';
     
-    var milestone = milestones[index];
+    //var milestone = milestones[index];
     _store.remove(milestone).then((_) {
       _stopMilestoneTimer();
     });
