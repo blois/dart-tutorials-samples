@@ -2,3 +2,5 @@
 packages
 out
 .buildlog
+pubspec.lock
+.project
